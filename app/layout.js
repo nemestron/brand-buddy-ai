@@ -1,5 +1,7 @@
 ﻿import { Host_Grotesk } from "next/font/google";
 import "./globals.css";
+import { ClerkProvider } from "@clerk/nextjs";
+import Provider from "./provider"; 
 
 const hostGrotesk = Host_Grotesk({ subsets: ["latin"] });
 
@@ -10,10 +12,14 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body className={hostGrotesk.className}>
-        {children}
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en">
+        <body className={hostGrotesk.className}>
+          <Provider>
+            {children}
+          </Provider>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
