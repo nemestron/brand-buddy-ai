@@ -8,12 +8,18 @@ import LogoIdea from './_components/LogoIdea'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import axios from 'axios'
+import { useUser } from '@clerk/nextjs'
+import { doc, setDoc } from 'firebase/firestore'
+import { db } from '@/configs/FirebaseConfig'
 
 function CreateLogo() {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(false);
   const [generatedLogo, setGeneratedLogo] = useState(null);
+  
+  // Get the current logged-in user
+  const { user } = useUser();
 
   const onHandleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -22,7 +28,6 @@ function CreateLogo() {
     }));
   }
 
-  // 1. Generate Prompt (Gemini) -> 2. Generate Image (Hugging Face)
   const GenerateLogo = async () => {
     setLoading(true);
     setStep(6); // Show Loading Screen
@@ -33,30 +38,39 @@ function CreateLogo() {
     '. The design style should be ' + formData?.design?.title;
 
     try {
-      // Step 1: Ask Gemini for the Prompt
+      // 1. Generate Text Prompt (Gemini)
       const result = await axios.post('/api/ai-logo-model', {
         prompt: PROMPT
       });
-      
       const aiResponse = result.data;
-      setGeneratedLogo(aiResponse); // Save text details
-
-      // Step 2: Ask Hugging Face for the Image
-      // We append "vector logo, white background" to ensure clean results
-      const imagePrompt = aiResponse.prompt + ", vector art, white background, high quality";
       
+      // 2. Generate Image (Hugging Face via SDK)
+      // We append "high quality, vector art" to ensure good results
+      const imagePrompt = aiResponse.prompt + ", high quality, vector art, white background";
       const imageResult = await axios.post('/api/ai-design-model', {
         prompt: imagePrompt
       });
 
-      // Step 3: Save the Image URL into the state object
-      setGeneratedLogo(prev => ({
-        ...prev,
-        image: imageResult.data.image
-      }));
+      const finalLogo = {
+        ...aiResponse,
+        image: imageResult.data.image,
+        title: formData.title,
+        desc: formData.desc,
+        id: Date.now().toString(), // Unique ID
+        userEmail: user?.primaryEmailAddress?.emailAddress,
+        createdAt: new Date().toISOString()
+      };
+
+      setGeneratedLogo(finalLogo);
+
+      // 3. Save to Firebase Cloud
+      // Path: users -> [email] -> logos -> [unique_id]
+      await setDoc(doc(db, "users", user?.primaryEmailAddress?.emailAddress, "logos", finalLogo.id), finalLogo);
+      
+      console.log("Logo Saved to Cloud Database!");
 
     } catch (error) {
-      console.error("Generation Error:", error);
+      console.error("Generation/Saving Error:", error);
     } finally {
       setLoading(false);
     }
